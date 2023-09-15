@@ -51,6 +51,7 @@ BOOL ExitCondition = FALSE;
 BOOL DebugModeEnabled = FALSE;
 BOOL DeleteInstDirEnabled = FALSE;
 BOOL ChdirBeforeRunEnabled = TRUE;
+LPTSTR CustomRuntimeFolder;
 TCHAR ImageFileName[MAX_PATH];
 
 #if _CONSOLE
@@ -228,6 +229,7 @@ BOOL OpCreateInstDirectory(LPVOID* p)
 
    DeleteInstDirEnabled = GetInteger(p);
    ChdirBeforeRunEnabled = GetInteger(p);
+   CustomRuntimeFolder = GetString(p);
 
    /* Create an installation directory that will hold the extracted files */
    TCHAR TempPath[MAX_PATH];
@@ -246,17 +248,27 @@ BOOL OpCreateInstDirectory(LPVOID* p)
       GetTempPath(MAX_PATH, TempPath);
    }
 
-   UINT tempResult = GetTempFileName(TempPath, _T("ocrastub"), 0, InstDir);
-   if (tempResult == 0u)
+   if (strlen(CustomRuntimeFolder) != 0)
    {
-      FATAL("Failed to get temp file name.");
-      return FALSE;
+      lstrcpy(InstDir, TempPath);
+      lstrcat(InstDir, _T("\\"));
+      lstrcat(InstDir, CustomRuntimeFolder);
+   }
+   else
+   {     
+      UINT tempResult = GetTempFileName(TempPath, _T("ocrastub"), 0, InstDir);
+      if (tempResult == 0u)
+      {
+         FATAL("Failed to get temp file name.");
+         return FALSE;
+      }
    }
 
    DEBUG("Creating installation directory: '%s'", InstDir);
 
    /* Attempt to delete the temp file created by GetTempFileName.
       Ignore errors, i.e. if it doesn't exist. */
+   /* If we can add a version check maybe we can skip this */   
    (void)DeleteFile(InstDir);
 
    if (!CreateDirectory(InstDir, NULL))

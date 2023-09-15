@@ -237,6 +237,8 @@ module Ocra
     :show_warnings => true,
     :debug => false,
     :debug_extract => false,
+    :local_extract => true,
+    :local_folder => nil,
     :arg => [],
     :enc => true,
     :gem => [],
@@ -283,6 +285,14 @@ module Ocra
     @env_before.each { |key, value| ENV[key] = value }
     ENV.each_key { |key| ENV.delete(key) unless @env_before.has_key?(key) }
     Dir.chdir @pwd_before
+  end
+
+  def Ocra.print_environment
+    puts 'DEBUG: Current environment'
+    puts "LOAD_PATH: #{$LOAD_PATH}"
+    puts "Dir.pwd: #{Dir.pwd}"
+    puts 'ENV:'
+    puts ENV.each { |key, value| puts "#{key} => #{value}" }
   end
 
   def Ocra.find_stubs
@@ -363,6 +373,8 @@ Executable options:
 --icon <ico>       Replace icon with a custom one.
 --debug            Executable will be verbose.
 --debug-extract    Executable will unpack to local dir and not delete after.
+--local-extract    Executable will unpack to local dir and delete after
+--local-folder     Subfolder to extract to when using --local-extract
 EOF
 
     while arg = argv.shift
@@ -409,6 +421,10 @@ EOF
         @options[:debug] = true
       when /\A--debug-extract\z/
         @options[:debug_extract] = true
+      when /\A--local-extract\z/
+        @options[:local_extract] = true
+      when /\A--local-folder\z/
+        @options[:local_folder] = Pathname(argv.shift)
       when /\A--\z/
         @options[:arg] = ARGV.dup
         ARGV.clear
@@ -460,6 +476,7 @@ EOF
   end
 
   def Ocra.init(argv)
+    print_environment if Ocra.debug
     save_environment
     parseargs(argv)
     find_stubs
@@ -726,6 +743,8 @@ EOF
     @added_load_paths = ($LOAD_PATH - @load_path_before).map { |loadpath| Pathname(loadpath).expand }
     working_directory = Pathname.pwd.expand
 
+    print_environment if Ocra.debug
+
     restore_environment
 
     # If the script was run, then detect the features it used
@@ -745,7 +764,8 @@ EOF
       @gemspecs = []
     end
 
-    require "rbconfig"
+    require 'rbconfig'
+    require 'rcedit'
     instsitelibdir = Host.sitelibdir.relative_path_from(Host.exec_prefix)
 
     load_path = []
@@ -1082,7 +1102,7 @@ EOF
           ocrafile.write([OP_ENABLE_DEBUG_MODE].pack("V"))
         end
 
-        createinstdir Ocra.debug_extract, !Ocra.debug_extract, Ocra.chdir_first
+        createinstdir(Ocra.debug_extract || Ocra.local_extract, !Ocra.debug_extract, Ocra.chdir_first, Ocra.Pathname(Ocra.local_folder))
 
         yield(self)
 
@@ -1174,9 +1194,9 @@ EOF
       end
     end
 
-    def createinstdir(next_to_exe = false, delete_after = false, chdir_before = false)
+    def createinstdir(next_to_exe = false, delete_after = false, chdir_first = false, custom_folder = Ocra.Pathname(''))
       unless Ocra.inno_script # Creation of installation directory will be handled by InnoSetup
-        @of << [OP_CREATE_INST_DIRECTORY, next_to_exe ? 1 : 0, delete_after ? 1 : 0, chdir_before ? 1 : 0].pack("VVVV")
+        @of << [OP_CREATE_INST_DIRECTORY, next_to_exe ? 1 : 0, delete_after ? 1 : 0, chdir_first ? 1 : 0, custom_folder.to_native].pack("VVVVZ*")
       end
     end
 
